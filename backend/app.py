@@ -14,7 +14,9 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "AVNS_Mtj06xX2Hn6ZOow5X15")
 DB_NAME = os.getenv("DB_NAME", "defaultdb")
 DB_PORT = int(os.getenv("DB_PORT", 26165))
 def get_db_connection():
-    ssl_config = {'ssl': True} if DB_HOST != "localhost" else None
+    # Aiven requires SSL. Pass an empty ssl dictionary for PyMySQL to enable TLS.
+    ssl_config = {'ssl': {}} if DB_HOST != "localhost" else None
+    
     return pymysql.connect(
         host=DB_HOST,
         user=DB_USER,
@@ -24,7 +26,6 @@ def get_db_connection():
         ssl=ssl_config,
         cursorclass=pymysql.cursors.DictCursor
     )
-
 def init_db():
     """ Automatically creates required tables and seeds initial data """
     try:
