@@ -19,7 +19,7 @@ export default function Auth({ setUser }) {
       ? { username: username, password: password } // Can accept username or email
       : { username: username, email: email, password: password };
 
-    fetch(`http://10.7.239.58:5000${endpoint}`, {
+   fetch(`https://shopzon-ecommerce.onrender.com${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)

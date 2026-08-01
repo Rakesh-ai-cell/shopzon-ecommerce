@@ -31,7 +31,7 @@ export default function CheckoutWizard({ cartItems, clearCart, setView }) {
     }
 
     // Hit your backend order registration route here
-    fetch('http://127.0.0.1:5000/api/orders', {
+    fetch('https://shopzon-ecommerce.onrender.com/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -7,7 +7,7 @@ export default function ProductList({ addToCart, searchTerm, selectedCategory })
   const [selectedProduct, setSelectedProduct] = useState(null); // Tracks the open product popup detail view
 
   useEffect(() => {
-    fetch('http://10.7.239.58:5000/api/products')
+   fetch('https://shopzon-ecommerce.onrender.com/api/products')
       .then(res => res.json())
       .then(data => {
         setProducts(Array.isArray(data) ? data : []);

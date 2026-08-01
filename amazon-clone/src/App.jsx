@@ -24,7 +24,10 @@ export default function App() {
 
   // NEW: Function to ask Flask for the latest order summary numbers
   const fetchLiveDatabaseMetrics = () => {
-    fetch('http://10.7.239.58:5000/api/admin/metrics')
+fetch('https://shopzon-ecommerce.onrender.com/api/admin/metrics', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      })
       .then(res => res.json())
       .then(data => {
         if (data.totalSalesCount !== undefined) {

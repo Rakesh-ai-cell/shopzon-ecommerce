@@ -13,7 +13,7 @@ export default function ProductDetail({ productId, user, onClose, onAddToCart })
   }, [productId]);
 
   const fetchProductDetails = () => {
-    fetch(`http://127.0.0.1:5000/api/products/${productId}`)
+   fetch(`https://shopzon-ecommerce.onrender.com/api/products/${productId}`)
       .then(res => res.json())
       .then(data => {
         setProduct(data);
@@ -26,7 +26,7 @@ export default function ProductDetail({ productId, user, onClose, onAddToCart })
     e.preventDefault();
     if (!comment.trim()) return;
 
-    fetch(`http://127.0.0.1:5000/api/products/${productId}/reviews`, {
+    fetch(`https://shopzon-ecommerce.onrender.com/api/products/${productId}/reviews`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: user.username, comment, rating })

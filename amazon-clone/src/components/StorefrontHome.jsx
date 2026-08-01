@@ -8,20 +8,23 @@ export default function StorefrontHome({ user, onAddToCart }) {
   const [loading, setLoading] = useState(true);
   const [activeProductId, setActiveProductId] = useState(null);
   
-  // NEW STATE: Query tracker tracking live string searches
+  // Query tracker tracking live string searches
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Fetch product categories on mount
   useEffect(() => {
-    fetch('http://127.0.0.1:5000/api/categories')
+    fetch('https://shopzon-ecommerce.onrender.com/api/categories')
       .then(res => res.json())
       .then(data => setCategories(Array.isArray(data) ? data : []))
       .catch(err => console.error("Error linking category manifest rows:", err));
   }, []);
 
+  // Fetch products based on selected category filter
   useEffect(() => {
     setLoading(true);
     const queryParam = selectedCategory === 'All' ? '' : `?category=${encodeURIComponent(selectedCategory)}`;
-    fetch(`http://127.0.0.1:5000/api/products${queryParam}`)
+    
+    fetch(`https://shopzon-ecommerce.onrender.com/api/products${queryParam}`)
       .then(res => res.json())
       .then(data => {
         setProducts(Array.isArray(data) ? data : []);
@@ -43,7 +46,7 @@ export default function StorefrontHome({ user, onAddToCart }) {
   return (
     <div style={{ background: '#eaeded', minHeight: '100vh', fontFamily: 'Arial, sans-serif', display: 'flex', flexDirection: 'column' }}>
       
-      {/* NEW INTEGRATED SEARCH BAR FRAMEWORK CONTAINER */}
+      {/* INTEGRATED SEARCH BAR CONTAINER */}
       <div style={{ background: '#232f3e', padding: '10px 30px', display: 'flex', justifyContent: 'center', borderBottom: '1px solid #131921' }}>
         <div style={{ display: 'flex', width: '100%', maxWidth: '700px', borderRadius: '4px', overflow: 'hidden' }}>
           <span style={{ background: '#f3f3f3', color: '#555', padding: '10px 15px', fontSize: '13px', display: 'flex', alignItems: 'center', borderRight: '1px solid #ccc', fontWeight: 'bold' }}>
@@ -143,7 +146,7 @@ function ProductCard({ product, onAddToCart, setActiveProductId }) {
         title="Click to view full description and review details"
       >
         <div style={{ height: '200px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '15px', background: '#fafafa', borderRadius: '4px' }}>
-          <img src={product.image_url} alt="" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+          <img src={product.image_url} alt={product.title} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
         </div>
         <span style={{ display: 'inline-block', fontSize: '11px', background: '#f0f2f2', color: '#565959', padding: '3px 8px', borderRadius: '2px', marginBottom: '8px', textTransform: 'uppercase', fontWeight: 'bold' }}>
           {product.category}

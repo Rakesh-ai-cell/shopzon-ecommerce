@@ -8,7 +8,7 @@ export default function OrderHistory({ user, setView }) {
     if (!user) return;
 
     // Fetch this specific user's grouped order details from Flask
-    fetch(`http://127.0.0.1:5000/api/orders/${user.id}`)
+    fetch(`https://shopzon-ecommerce.onrender.com/api/orders/${user.id}`)
       .then((res) => res.json())
       .then((data) => {
         setOrders(data);

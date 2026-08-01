@@ -29,14 +29,14 @@ export default function AdminDashboard({ metrics }) {
   }, []);
 
   const fetchLiveCatalog = () => {
-    fetch('http://127.0.0.1:5000/api/products')
+   fetch('https://shopzon-ecommerce.onrender.com/api/products')
       .then(res => res.json())
       .then(data => setProducts(Array.isArray(data) ? data : []))
       .catch(err => console.error("Error reading catalog logs:", err));
   };
 
   const fetchLiveCategories = () => {
-    fetch('http://127.0.0.1:5000/api/categories')
+   fetch('https://shopzon-ecommerce.onrender.com/api/categories')
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
@@ -68,7 +68,7 @@ export default function AdminDashboard({ metrics }) {
       description
     };
 
-    fetch('http://127.0.0.1:5000/api/products', {
+    fetch('https://shopzon-ecommerce.onrender.com/api/products', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -100,7 +100,7 @@ export default function AdminDashboard({ metrics }) {
   const handleItemDeletion = (id) => {
     if (!window.confirm("Are you sure you want to delete this product from the database?")) return;
 
-    fetch(`http://127.0.0.1:5000/api/products/${id}`, {
+   fetch(`https://shopzon-ecommerce.onrender.com/api/products/${id}`, {
       method: 'DELETE'
     })
     .then(res => res.json())
