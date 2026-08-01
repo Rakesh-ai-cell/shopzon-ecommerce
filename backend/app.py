@@ -25,6 +25,7 @@ def get_db_connection():
         ssl={'ssl': True} if DB_HOST != "localhost" else None,
         cursorclass=pymysql.cursors.DictCursor
     )
+    
 
 # ==================== CATEGORIES ENDPOINTS ====================
 @app.route('/api/categories', methods=['GET'])
