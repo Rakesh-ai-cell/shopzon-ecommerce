@@ -13,7 +13,6 @@ DB_USER = os.getenv("DB_USER", "avnadmin")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "AVNS_Mtj06xX2Hn6ZOow5X15")
 DB_NAME = os.getenv("DB_NAME", "defaultdb")
 DB_PORT = int(os.getenv("DB_PORT", 26165))
-
 def get_db_connection():
     ssl_config = {'ssl': True} if DB_HOST != "localhost" else None
     return pymysql.connect(
