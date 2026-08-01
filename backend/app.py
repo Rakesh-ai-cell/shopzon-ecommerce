@@ -357,23 +357,33 @@ def get_admin_metrics():
 def seed_products():
     import json
     from urllib.request import urlopen
+    
+    # Clear existing limited products or upsert all 20
     with urlopen('https://fakestoreapi.com/products') as response:
         items = json.loads(response.read().decode())
+    
     conn = get_db_connection()
     cursor = conn.cursor()
+    
+    inserted_count = 0
     for item in items:
-        cursor.execute(
-            "INSERT INTO products (title, price, description, category, image_url) VALUES (%s, %s, %s, %s, %s)",
-            (item['title'], item['price'], item['description'], item['category'], item['image'])
-        )
+        # ON DUPLICATE KEY UPDATE ensures missing items get added without failing on duplicates
+        query = """
+            INSERT INTO products (title, price, description, category, image_url) 
+            VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE 
+                price = VALUES(price), 
+                description = VALUES(description),
+                image_url = VALUES(image_url)
+        """
+        cursor.execute(query, (item['title'], item['price'], item['description'], item['category'], item['image']))
+        inserted_count += 1
+        
     conn.commit()
     cursor.close()
     conn.close()
-    return {"message": "Database seeded successfully!"}
-
-if __name__ == '__main__':
-    port = int(os.getenv("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    
+    return {"status": "success", "total_processed": inserted_count, "message": f"Successfully seeded {inserted_count} products!"}
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
