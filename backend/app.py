@@ -6,19 +6,25 @@ app = Flask(__name__)
 # Enable CORS for React running on port 5173
 CORS(app)
 
-# Database Configuration matching XAMPP / WAMP defaults
-db_config = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': '',
-    'database': 'shopzon_db',
-    'cursorclass': pymysql.cursors.DictCursor
-}
+import os
 
-
+# Read database details from environment variables
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_USER = os.getenv("DB_USER", "root")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+DB_NAME = os.getenv("DB_NAME", "defaultdb")
+DB_PORT = int(os.getenv("DB_PORT", 3306))
 
 def get_db_connection():
-    return pymysql.connect(**db_config)
+    return pymysql.connect(
+        host=DB_HOST,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        database=DB_NAME,
+        port=DB_PORT,
+        ssl={'ssl': True} if DB_HOST != "localhost" else None,
+        cursorclass=pymysql.cursors.DictCursor
+    )
 
 # ==================== CATEGORIES ENDPOINTS ====================
 @app.route('/api/categories', methods=['GET'])
