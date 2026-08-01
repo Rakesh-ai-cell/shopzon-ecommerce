@@ -353,8 +353,27 @@ def get_admin_metrics():
         return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
+@app.route('/api/seed', methods=['GET'])
+def seed_products():
+    import json
+    from urllib.request import urlopen
+    with urlopen('https://fakestoreapi.com/products') as response:
+        items = json.loads(response.read().decode())
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    for item in items:
+        cursor.execute(
+            "INSERT INTO products (title, price, description, category, image_url) VALUES (%s, %s, %s, %s, %s)",
+            (item['title'], item['price'], item['description'], item['category'], item['image'])
+        )
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return {"message": "Database seeded successfully!"}
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
-    
+if __name__ == '__main__':
+    port = int(os.getenv("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
