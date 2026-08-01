@@ -1,31 +1,116 @@
+import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pymysql
 
 app = Flask(__name__)
-# Enable CORS for React running on port 5173
+# Enable CORS for React frontend
 CORS(app)
 
-import os
-
-# Read database details from environment variables
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_USER = os.getenv("DB_USER", "root")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+# Read database details from environment variables (falls back to Aiven defaults)
+DB_HOST = os.getenv("DB_HOST", "mysql-afcb92d-rakeysh122-a4e8.g.aivencloud.com")
+DB_USER = os.getenv("DB_USER", "avnadmin")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "AVNS_Mtj06xX2Hn6ZOow5X15")
 DB_NAME = os.getenv("DB_NAME", "defaultdb")
-DB_PORT = int(os.getenv("DB_PORT", 3306))
+DB_PORT = int(os.getenv("DB_PORT", 26165))
 
 def get_db_connection():
+    ssl_config = {'ssl': True} if DB_HOST != "localhost" else None
     return pymysql.connect(
         host=DB_HOST,
         user=DB_USER,
         password=DB_PASSWORD,
         database=DB_NAME,
         port=DB_PORT,
-        ssl={'ssl': True} if DB_HOST != "localhost" else None,
+        ssl=ssl_config,
         cursorclass=pymysql.cursors.DictCursor
     )
-    
+
+def init_db():
+    """ Automatically creates required tables and seeds initial data """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # 1. Users table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(100) UNIQUE NOT NULL,
+            email VARCHAR(100) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            role VARCHAR(20) DEFAULT 'USER'
+        );
+        """)
+
+        # 2. Products table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS products (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            title VARCHAR(255) NOT NULL,
+            category VARCHAR(100) NOT NULL,
+            price DECIMAL(10, 2) NOT NULL,
+            image_url TEXT,
+            description TEXT,
+            rating_rate DECIMAL(3, 2) DEFAULT 4.50,
+            rating_count INT DEFAULT 10
+        );
+        """)
+
+        # 3. Reviews table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reviews (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            product_id INT NOT NULL,
+            username VARCHAR(100) DEFAULT 'Anonymous',
+            comment TEXT NOT NULL,
+            rating INT DEFAULT 5,
+            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+        );
+        """)
+
+        # 4. Orders table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS orders (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(100) NOT NULL,
+            total_price DECIMAL(10, 2) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
+        # 5. Order items table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS order_items (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            order_id INT NOT NULL,
+            product_id INT NOT NULL,
+            quantity INT NOT NULL,
+            price_at_purchase DECIMAL(10, 2) NOT NULL,
+            FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+        );
+        """)
+
+        # Seed sample product if empty
+        cursor.execute("SELECT COUNT(*) as count FROM products;")
+        if cursor.fetchone()['count'] == 0:
+            cursor.execute("""
+            INSERT INTO products (title, category, price, image_url, description, rating_rate, rating_count)
+            VALUES 
+            ('Fjallraven - Foldsack No. 1 Backpack', 'Electronics', 109.95, 'https://fakestoreapi.com/img/81fPKd-2AYL._AC_SL1500_.jpg', 'Your perfect pack for everyday use and walks in the forest.', 3.90, 120),
+            ('Mens Casual Premium Slim Fit T-Shirts', 'Fashion', 22.30, 'https://fakestoreapi.com/img/71-3HjGNDUL._AC_SY879._SX._UX._SY._UY_.jpg', 'Slim-fitting style, contrast raglan long sleeve.', 4.10, 259);
+            """)
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print("Database schema verified and tables initialized successfully!")
+    except Exception as e:
+        print("Schema setup warning:", str(e))
+
+# Auto-initialize database on application startup
+init_db()
+
 
 # ==================== CATEGORIES ENDPOINTS ====================
 @app.route('/api/categories', methods=['GET'])
@@ -211,7 +296,7 @@ def add_product_review(product_id):
     finally:
         conn.close()
 
-# ==================== ORDERS ENDPOINTS (FIXED) ====================
+# ==================== ORDERS ENDPOINTS ====================
 @app.route('/api/orders', methods=['POST'])
 def place_order():
     conn = get_db_connection()
@@ -255,7 +340,6 @@ def get_admin_metrics():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        # Pull dynamic analytics figures from orders table schema
         cursor.execute("SELECT COUNT(*) AS total_sales, COALESCE(SUM(total_price), 0.00) AS total_earnings FROM orders")
         metrics = cursor.fetchone()
         
@@ -269,4 +353,5 @@ def get_admin_metrics():
         conn.close()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.getenv("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
