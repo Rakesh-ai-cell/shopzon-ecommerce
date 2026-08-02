@@ -24,7 +24,7 @@ export default function App() {
 
   // NEW: Function to ask Flask for the latest order summary numbers
   const fetchLiveDatabaseMetrics = () => {
-fetch('https://shopzon-ecommerce.onrender.com/api/admin/metrics', {
+    fetch('https://shopzon-ecommerce.onrender.com/api/admin/metrics', {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
       })
@@ -55,11 +55,11 @@ fetch('https://shopzon-ecommerce.onrender.com/api/admin/metrics', {
       if (existingCartItem) {
         return prevCart.map((item) =>
           item.id === product.id 
-            ? { ...item, quantity: item.quantity + incomingQuantity } 
+            ? { ...item, quantity: (item.quantity || 1) + incomingQuantity, qty: (item.qty || 1) + incomingQuantity } 
             : item
         );
       }
-      return [...prevCart, { ...product, quantity: incomingQuantity }];
+      return [...prevCart, { ...product, quantity: incomingQuantity, qty: incomingQuantity }];
     });
     
     alert(`Success: Added ${incomingQuantity} unit(s) of this product to your cart!`);
@@ -67,10 +67,14 @@ fetch('https://shopzon-ecommerce.onrender.com/api/admin/metrics', {
 
   const handleUpdateCartQuantity = (productId, newQty) => {
     if (newQty <= 0) {
-      setCart(prev => prev.filter(item => item.id !== productId));
+      handleRemoveFromCart(productId);
     } else {
-      setCart(prev => prev.map(item => item.id === productId ? { ...item, quantity: newQty } : item));
+      setCart(prev => prev.map(item => item.id === productId ? { ...item, quantity: newQty, qty: newQty } : item));
     }
+  };
+
+  const handleRemoveFromCart = (productId) => {
+    setCart(prev => prev.filter(item => item.id !== productId));
   };
 
   const handleClearCart = () => {
@@ -80,7 +84,7 @@ fetch('https://shopzon-ecommerce.onrender.com/api/admin/metrics', {
     fetchLiveDatabaseMetrics();
   };
 
-  const totalItemsInCart = cart.reduce((accumulator, item) => accumulator + item.quantity, 0);
+  const totalItemsInCart = cart.reduce((accumulator, item) => accumulator + (item.quantity || item.qty || 1), 0);
 
   const handleLogoutSequence = () => {
     setUser(null);
@@ -169,11 +173,12 @@ fetch('https://shopzon-ecommerce.onrender.com/api/admin/metrics', {
 
       {isCartOpen && (
         <CartModal 
-          cartItems={cart} 
+          cart={cart} 
+          removeFromCart={handleRemoveFromCart}
+          updateQuantity={handleUpdateCartQuantity}
+          clearCart={handleClearCart}
+          closeModal={() => setIsCartOpen(false)} 
           user={user}
-          onUpdateQty={handleUpdateCartQuantity}
-          onClearCart={handleClearCart}
-          onClose={() => setIsCartOpen(false)} 
         />
       )}
 

@@ -1,83 +1,341 @@
-import React from 'react';
+import React, { useState } from 'react';
 
-export default function Cart({ cart, setView, updateQuantity, removeFromCart, user, clearCart }) {
-  const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+export default function CartModal({ 
+  cart = [], 
+  removeFromCart = () => {}, 
+  updateQuantity = () => {}, 
+  clearCart = () => {}, 
+  closeModal = () => {}, 
+  user = null 
+}) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleCheckout = () => {
-    if (!user) {
-      alert("⚠️ You must sign in first to checkout your items!");
-      setView('auth');
+  // Reliable image fallback if product image fails to load
+  const defaultImage = "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500";
+
+  const handleImageError = (e) => {
+    e.target.onerror = null;
+    e.target.src = defaultImage;
+  };
+
+  // Safe array check to prevent runtime crashes
+  const safeCart = Array.isArray(cart) ? cart : [];
+
+  // Financial calculations
+  const subtotal = safeCart.reduce((sum, item) => {
+    const price = Number(item?.price || 0);
+    const qty = Number(item?.qty || item?.quantity || 1);
+    return sum + (price * qty);
+  }, 0);
+
+  const shippingFee = safeCart.length > 0 ? 9.99 : 0.00;
+  const taxFee = subtotal * 0.13; // 13% tax
+  const totalAmount = subtotal + shippingFee + taxFee;
+
+  const handleCheckout = async () => {
+    if (safeCart.length === 0) {
+      alert("Your basket is empty!");
       return;
     }
 
-    if (cart.length === 0) {
-      alert("Your cart is empty!");
-      return;
-    }
+    setIsSubmitting(true);
 
-    // Ship the transaction package to our brand new Flask endpoint
-    fetch('http://127.0.0.1:5000/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: user.id,
-        cart: cart,
-        total_amount: totalAmount
-      })
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.message) {
-        alert("🎉 Checkout successful! Transaction posted securely into your MySQL tables.");
-        clearCart(); // Wipe the React cart local state array clean
-        setView('orders'); // Jump directly over to your new history records view
+    // Format cart payload cleanly to ensure MySQL Foreign Key & schema alignment
+    const formattedItems = safeCart.map(item => ({
+      id: Number(item?.id || item?.product_id || 1),
+      qty: Number(item?.qty || item?.quantity || 1),
+      price: Number(item?.price || 0)
+    }));
+
+    const payload = {
+      username: user?.username || user?.email || 'Guest User',
+      total_charge: parseFloat(totalAmount.toFixed(2)),
+      items: formattedItems
+    };
+
+    try {
+      const response = await fetch('https://shopzon-ecommerce.onrender.com/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(`🎉 Purchase Successful!\nOrder Reference: #${data.order_id}\nTotal Billed: $${totalAmount.toFixed(2)}`);
+        clearCart();
+        closeModal();
       } else {
-        alert("❌ Order Failed: " + data.error);
+        alert(`Checkout Failed: ${data.error || 'Check backend server logs'}`);
       }
-    })
-    .catch(err => alert("Connection error submitting transaction: " + err));
+    } catch (err) {
+      alert('Network error connecting to backend server. Please verify your connection.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div style={{ padding: '20px', display: 'flex', gap: '20px', fontFamily: 'Arial', alignItems: 'flex-start' }}>
-      <div style={{ flex: 3, background: 'white', padding: '20px', borderRadius: '4px' }}>
-        <h2 style={{ borderBottom: '1px solid #ddd', paddingBottom: '10px' }}>Shopping Cart</h2>
+    <div style={styles.overlay} onClick={closeModal}>
+      <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
         
-        {cart.length === 0 ? (
-          <p>Your ShopZon cart is currently empty.</p>
-        ) : (
-          cart.map((item) => (
-            <div key={item.id} style={styles.cartItem}>
-              <img src={item.image} alt={item.title} style={{ width: '100px', height: '100px', objectFit: 'contain' }} />
-              <div style={{ flex: 1, paddingLeft: '20px' }}>
-                <h4 style={{ margin: '0 0 10px 0' }}>{item.title}</h4>
-                <button onClick={() => removeFromCart(item.id)} style={styles.deleteLink}>Delete from cart</button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
-                  <button onClick={() => updateQuantity(item.id, -1)} style={styles.qtyBtn}>-</button>
-                  <span>Qty: {item.quantity}</span>
-                  <button onClick={() => updateQuantity(item.id, 1)} style={styles.qtyBtn}>+</button>
-                </div>
-              </div>
-              <div style={{ fontSize: '18px', fontWeight: 'bold' }}>${(item.price * item.quantity).toFixed(2)}</div>
-            </div>
-          ))
-        )}
-      </div>
+        {/* Header */}
+        <div style={styles.header}>
+          <h2 style={{ margin: 0, fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            🛒 Review Your Basket Pipeline
+          </h2>
+          <button style={styles.closeBtn} onClick={closeModal}>✕</button>
+        </div>
 
-      <div style={{ flex: 1, background: 'white', padding: '20px', borderRadius: '4px' }}>
-        <h3 style={{ margin: '0 0 15px 0' }}>Subtotal ({cart.reduce((sum, i) => sum + i.quantity, 0)} items):</h3>
-        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#B12704', marginBottom: '20px' }}>${totalAmount.toFixed(2)}</div>
-        <button onClick={handleCheckout} style={styles.checkoutBtn}>
-          Proceed to Buy
-        </button>
+        {/* Cart Items List */}
+        <div style={styles.itemsContainer}>
+          {safeCart.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#888' }}>
+              Your shopping cart is currently empty.
+            </div>
+          ) : (
+            safeCart.map((item, index) => {
+              const itemId = item?.id || item?.product_id || index;
+              const itemTitle = item?.title || item?.name || "ShopZon Item";
+              const itemImg = item?.image_url || item?.image || defaultImage;
+              const itemQty = Number(item?.qty || item?.quantity || 1);
+              const itemPrice = Number(item?.price || 0);
+
+              return (
+                <div key={itemId} style={styles.itemRow}>
+                  <div style={styles.imgWrapper}>
+                    <img 
+                      src={itemImg} 
+                      alt={itemTitle} 
+                      onError={handleImageError} 
+                      style={styles.img} 
+                    />
+                  </div>
+                  
+                  <div style={styles.itemDetails}>
+                    <div style={styles.itemTitle}>{itemTitle}</div>
+                    <div style={styles.itemPrice}>${itemPrice.toFixed(2)}</div>
+                    
+                    <div style={styles.qtyRow}>
+                      <label style={{ fontSize: '12px', color: '#aaa' }}>Qty:</label>
+                      <button 
+                        style={styles.qtyBtn} 
+                        onClick={() => updateQuantity(itemId, itemQty - 1)}
+                        disabled={itemQty <= 1}
+                      >
+                        -
+                      </button>
+                      <span style={{ fontWeight: 'bold', padding: '0 8px' }}>{itemQty}</span>
+                      <button 
+                        style={styles.qtyBtn} 
+                        onClick={() => updateQuantity(itemId, itemQty + 1)}
+                      >
+                        +
+                      </button>
+                      
+                      <button 
+                        style={styles.removeBtn} 
+                        onClick={() => removeFromCart(itemId)}
+                      >
+                        Remove item
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Charge Specifications Section */}
+        {safeCart.length > 0 && (
+          <div style={styles.summarySection}>
+            <h4 style={{ margin: '0 0 12px 0', textAlign: 'center', color: '#aaa', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              Order Charge Specifications
+            </h4>
+            
+            <div style={styles.specRow}>
+              <span>Basket Subtotal:</span>
+              <span>${subtotal.toFixed(2)}</span>
+            </div>
+            <div style={styles.specRow}>
+              <span>Estimated Delivery Fee:</span>
+              <span>${shippingFee.toFixed(2)}</span>
+            </div>
+            <div style={styles.specRow}>
+              <span>Regional Estimated Tax (13%):</span>
+              <span>${taxFee.toFixed(2)}</span>
+            </div>
+
+            <div style={styles.totalRow}>
+              <span>Total Bill Balance:</span>
+              <span>${totalAmount.toFixed(2)}</span>
+            </div>
+
+            <button 
+              style={{ ...styles.checkoutBtn, opacity: isSubmitting ? 0.7 : 1 }} 
+              onClick={handleCheckout}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? '🔄 Saving to Database Engine Logs...' : '🚀 Place Secure Purchase Order'}
+            </button>
+            <p style={{ textAlign: 'center', fontSize: '11px', color: '#666', marginTop: '8px', marginBottom: 0 }}>
+              Submitting registers real data node inputs down to backend relational tables.
+            </p>
+          </div>
+        )}
+
       </div>
     </div>
   );
 }
 
 const styles = {
-  cartItem: { display: 'flex', alignItems: 'center', borderBottom: '1px solid #ddd', padding: '15px 0' },
-  deleteLink: { background: 'none', border: 'none', color: '#007185', cursor: 'pointer', padding: 0, fontSize: '12px' },
-  qtyBtn: { background: '#e7e9ec', border: '1px solid #adb1b8', padding: '2px 8px', cursor: 'pointer', borderRadius: '3px' },
-  checkoutBtn: { background: '#ffd814', border: '1px solid #fcd200', borderRadius: '8px', padding: '10px', width: '100%', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }
+  overlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0, 0, 0, 0.85)',
+    display: 'flex',
+    justifyContent: 'flex-end',
+    zIndex: 9999,
+    fontFamily: 'Arial, sans-serif'
+  },
+  modalCard: {
+    background: '#18181c',
+    width: '100%',
+    maxWidth: '500px',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    color: '#fff',
+    boxShadow: '-5px 0 25px rgba(0,0,0,0.5)',
+    padding: '24px'
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: '16px',
+    borderBottom: '1px solid #333'
+  },
+  closeBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#aaa',
+    fontSize: '22px',
+    cursor: 'pointer'
+  },
+  itemsContainer: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '16px 0'
+  },
+  itemRow: {
+    display: 'flex',
+    gap: '16px',
+    background: '#222228',
+    borderRadius: '8px',
+    padding: '12px',
+    marginBottom: '12px',
+    border: '1px solid #2d2d35'
+  },
+  imgWrapper: {
+    width: '70px',
+    height: '70px',
+    background: '#fff',
+    borderRadius: '6px',
+    padding: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden'
+  },
+  img: {
+    maxWidth: '100%',
+    maxHeight: '100%',
+    objectFit: 'contain'
+  },
+  itemDetails: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between'
+  },
+  itemTitle: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#3498db',
+    lineHeight: '1.3'
+  },
+  itemPrice: {
+    fontSize: '15px',
+    fontWeight: 'bold',
+    color: '#fff',
+    margin: '4px 0'
+  },
+  qtyRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px'
+  },
+  qtyBtn: {
+    background: '#33333d',
+    color: '#fff',
+    border: '1px solid #444',
+    borderRadius: '4px',
+    width: '24px',
+    height: '24px',
+    cursor: 'pointer',
+    fontWeight: 'bold'
+  },
+  removeBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#ff4d4d',
+    fontSize: '12px',
+    cursor: 'pointer',
+    marginLeft: 'auto'
+  },
+  summarySection: {
+    borderTop: '1px solid #333',
+    paddingTop: '16px',
+    background: '#121215',
+    borderRadius: '8px',
+    padding: '16px',
+    marginTop: 'auto'
+  },
+  specRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '13px',
+    color: '#aaa',
+    marginBottom: '8px'
+  },
+  totalRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '18px',
+    fontWeight: 'bold',
+    color: '#ff9900',
+    marginTop: '12px',
+    paddingTop: '12px',
+    borderTop: '1px solid #2a2a30'
+  },
+  checkoutBtn: {
+    width: '100%',
+    background: '#ffd814',
+    color: '#000',
+    border: 'none',
+    borderRadius: '25px',
+    padding: '14px',
+    fontWeight: 'bold',
+    fontSize: '15px',
+    cursor: 'pointer',
+    marginTop: '16px',
+    transition: 'background 0.2s'
+  }
 };

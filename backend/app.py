@@ -369,7 +369,28 @@ def seed_products():
         return jsonify({"status": "success", "total_processed": inserted_count, "message": f"Successfully seeded {inserted_count} products!"}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
+@app.route('/api/auth/reset-password', methods=['POST', 'OPTIONS'])
+def reset_password():
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'OK'}), 200
+        
+    data = request.json or {}
+    email = data.get('email')
+    new_password = data.get('new_password')
+    
+    if not email or not new_password:
+        return jsonify({"error": "Email and new password required"}), 400
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE users SET password = %s WHERE email = %s", (new_password, email))
+        conn.commit()
+        return jsonify({"message": "Password updated successfully!"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
