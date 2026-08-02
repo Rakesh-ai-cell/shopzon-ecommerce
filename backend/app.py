@@ -1,22 +1,22 @@
 import os
+import json
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pymysql
 
 app = Flask(__name__)
-# Enable CORS for React frontend
 CORS(app)
 
-# Read database details from environment variables (falls back to Aiven defaults)
-DB_HOST = os.getenv("DB_HOST", "mysql-afcb92d-rakeysh122-a4e8.g.aivencloud.com")
-DB_USER = os.getenv("DB_USER", "avnadmin")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "AVNS_Mtj06xX2Hn6ZOow5X15")
-DB_NAME = os.getenv("DB_NAME", "defaultdb")
+# Read database details from environment variables
+DB_HOST = os.getenv("DB_HOST", "mysql-afcb92d-rakeysh122-a4e8.g.aivencloud.com").strip()
+DB_USER = os.getenv("DB_USER", "avnadmin").strip()
+DB_PASSWORD = os.getenv("DB_PASSWORD", "AVNS_Mtj06xX2Hn6ZOow5X15").strip()
+DB_NAME = os.getenv("DB_NAME", "defaultdb").strip()
 DB_PORT = int(os.getenv("DB_PORT", 26165))
 
 def get_db_connection():
     # Correct SSL settings for PyMySQL connecting to Aiven from Render
-    ssl_config = {"ssl": {}} if DB_HOST != "localhost" else None
+    ssl_config = {"ssl_mode": "REQUIRED"} if DB_HOST != "localhost" else None
     
     return pymysql.connect(
         host=DB_HOST,
@@ -93,16 +93,6 @@ def init_db():
         );
         """)
 
-        # Seed sample product if empty
-        cursor.execute("SELECT COUNT(*) as count FROM products;")
-        if cursor.fetchone()['count'] == 0:
-            cursor.execute("""
-            INSERT INTO products (title, category, price, image_url, description, rating_rate, rating_count)
-            VALUES 
-            ('Fjallraven - Foldsack No. 1 Backpack', 'Electronics', 109.95, 'https://fakestoreapi.com/img/81fPKd-2AYL._AC_SL1500_.jpg', 'Your perfect pack for everyday use and walks in the forest.', 3.90, 120),
-            ('Mens Casual Premium Slim Fit T-Shirts', 'Fashion', 22.30, 'https://fakestoreapi.com/img/71-3HjGNDUL._AC_SY879._SX._UX._SY._UY_.jpg', 'Slim-fitting style, contrast raglan long sleeve.', 4.10, 259);
-            """)
-
         conn.commit()
         cursor.close()
         conn.close()
@@ -123,7 +113,7 @@ def get_categories():
         cursor.execute("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category != ''")
         categories = [row['category'] for row in cursor.fetchall()]
         if not categories:
-            categories = ["Electronics", "Home & Kitchen", "Books", "Fashion"]
+            categories = ["Electronics", "Jewelery", "Men's Clothing", "Women's Clothing"]
         return jsonify(categories), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -312,14 +302,12 @@ def place_order():
         if not username or not items:
             return jsonify({"error": "Missing order payload data"}), 400
 
-        # 1. Insert into main orders table
         cursor.execute(
             "INSERT INTO orders (username, total_price) VALUES (%s, %s)",
             (username, total_charge)
         )
         order_id = cursor.lastrowid 
 
-        # 2. Insert detailed items array
         for item in items:
             cursor.execute(
                 """INSERT INTO order_items 
@@ -353,37 +341,49 @@ def get_admin_metrics():
         return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
+
+# ==================== SEEDER ENDPOINT ====================
 @app.route('/api/seed', methods=['GET'])
 def seed_products():
-    import json
-    from urllib.request import urlopen
-    
-    # Clear existing limited products or upsert all 20
-    with urlopen('https://fakestoreapi.com/products') as response:
-        items = json.loads(response.read().decode())
-    
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    inserted_count = 0
-    for item in items:
-        # ON DUPLICATE KEY UPDATE ensures missing items get added without failing on duplicates
-        query = """
-            INSERT INTO products (title, price, description, category, image_url) 
-            VALUES (%s, %s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE 
-                price = VALUES(price), 
-                description = VALUES(description),
-                image_url = VALUES(image_url)
-        """
-        cursor.execute(query, (item['title'], item['price'], item['description'], item['category'], item['image']))
-        inserted_count += 1
-        
-    conn.commit()
-    cursor.close()
-    conn.close()
-    
-    return {"status": "success", "total_processed": inserted_count, "message": f"Successfully seeded {inserted_count} products!"}
+    products_data = [
+        ("Fjallraven - Foldsack No. 1 Backpack", 109.95, "Your perfect pack for everyday use and walks in the forest.", "men's clothing", "https://fakestoreapi.com/img/81fPKd-2AYL._AC_SL1500_.jpg"),
+        ("Mens Casual Premium Slim Fit T-Shirts", 22.30, "Slim-fitting style, contrast raglan long sleeve, three-button henley placket.", "men's clothing", "https://fakestoreapi.com/img/71-3HjGNDUL._AC_SY879._SX._UX._SY._UY_.jpg"),
+        ("Mens Cotton Jacket", 55.99, "Great outerwear jackets for Spring/Autumn/Winter, suitable for many occasions.", "men's clothing", "https://fakestoreapi.com/img/71li-ujtlUL._AC_UX679_.jpg"),
+        ("Mens Casual Slim Fit", 15.99, "The color could be slightly different between on the screen and in practice.", "men's clothing", "https://fakestoreapi.com/img/71YXzeOuslL._AC_UY879_.jpg"),
+        ("John Hardy Women's Legends Naga Gold & Silver Dragon Station Chain Bracelet", 695.00, "From our Legends Collection, the Naga was inspired by the mythical water dragon.", "jewelery", "https://fakestoreapi.com/img/71pWzhdJNwL._AC_UL640_QL65_ML3_.jpg"),
+        ("Solid Gold Petite Micropave", 168.00, "Satisfaction Guaranteed. Return or exchange any order within 30 days.", "jewelery", "https://fakestoreapi.com/img/61sbMiUnoGL._AC_UL640_QL65_ML3_.jpg"),
+        ("White Gold Plated Princess", 9.99, "Classic Created Wedding Engagement Solitaire Diamond Promise Ring for Her.", "jewelery", "https://fakestoreapi.com/img/71YAIFU48IL._AC_UL640_QL65_ML3_.jpg"),
+        ("Pierced Owl Rose Gold Plated Stainless Steel Double", 10.99, "Rose Gold Plated Double Flared Tunnel Plug Earrings.", "jewelery", "https://fakestoreapi.com/img/51UDEzMJVpL._AC_UL640_QL65_ML3_.jpg"),
+        ("WD 2TB Elements Portable External Hard Drive - USB 3.0", 64.00, "USB 3.0 and USB 2.0 Compatibility Fast data transfers Improve PC Performance.", "electronics", "https://fakestoreapi.com/img/61IBBVJvSDL._AC_SY879_.jpg"),
+        ("SanDisk SSD PLUS 1TB Internal SSD - SATA III 6 Gb/s", 109.00, "Easy upgrade for faster boot up, shutdown, application load and response.", "electronics", "https://fakestoreapi.com/img/61U7T1koQqL._AC_SX679_.jpg"),
+        ("Silicon Power 256GB SSD 3D NAND A55 SLC Cache Performance Boost", 109.00, "3D NAND flash are applied to deliver high transfer speeds.", "electronics", "https://fakestoreapi.com/img/71kWymZ+c+L._AC_SX679_.jpg"),
+        ("WD 4TB Gaming Drive Portable External Hard Drive", 114.00, "Expand your PS4 gaming experience, Play anywhere Fast and easy setup.", "electronics", "https://fakestoreapi.com/img/61mtL6ch4L._AC_SX679_.jpg"),
+        ("Acer SB220Q bi 21.5 inches Full HD Ultra-Thin", 599.00, "21.5 inches Full HD (1920 x 1080) widescreen IPS display.", "electronics", "https://fakestoreapi.com/img/81QpkIctqPL._AC_SX679_.jpg"),
+        ("Samsung 49-Inch CHG90 144Hz Curved Gaming Monitor", 999.99, "49 INCH SUPER ULTRAWIDE 32:9 CURVED GAMING MONITOR.", "electronics", "https://fakestoreapi.com/img/81Zt42ioCgL._AC_SX679_.jpg"),
+        ("BIYLACLESEN Women's 3-in-1 Snowboard Jacket Winter Coats", 56.99, "Note: The Jackets is US standard size.", "women's clothing", "https://fakestoreapi.com/img/51Y5NI-IWH3L._AC_UX679_.jpg"),
+        ("Lock and Love Women's Removable Hooded Faux Leather Moto Biker Jacket", 29.95, "100% POLYURETHANE(shell) 100% POLYESTER(lining).", "women's clothing", "https://fakestoreapi.com/img/81XH0e8fefL._AC_UY879_.jpg"),
+        ("Rain Jacket Women Windbreaker Striped Climbing Raincoats", 39.99, "Lightweight perfect for trip or casual wear.", "women's clothing", "https://fakestoreapi.com/img/71HblAHs5xL._AC_UY879_-2.jpg"),
+        ("MBJ Women's Solid Short Sleeve Boat Neck V", 9.85, "95% RAYON 5% SPANDEX, Made in USA.", "women's clothing", "https://fakestoreapi.com/img/71z3kpMAYsL._AC_UY879_.jpg"),
+        ("Opna Women's Short Sleeve Moisture", 7.95, "100% Polyester, Machine wash, Soft premium lightweight fabric.", "women's clothing", "https://fakestoreapi.com/img/51eg55uWmdL._AC_UX679_.jpg"),
+        ("DANVOUBA Women's Casual Cotton Short Sleeve", 12.99, "95% Cotton, 5% Spandex. Features: Casual, Short Sleeve.", "women's clothing", "https://fakestoreapi.com/img/61pHAEJ4NML._AC_UX679_.jpg")
+    ]
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        inserted_count = 0
+        for item in products_data:
+            cursor.execute(
+                "INSERT INTO products (title, price, description, category, image_url) VALUES (%s, %s, %s, %s, %s)",
+                item
+            )
+            inserted_count += 1
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"status": "success", "total_processed": inserted_count, "message": f"Successfully seeded {inserted_count} products!"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
