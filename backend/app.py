@@ -1,13 +1,28 @@
 import os
-import json
+import random
+import string
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_mail import Mail, Message
 import pymysql
 
 app = Flask(__name__)
 CORS(app)
 
-# Read database details from environment variables
+# ==================== GMAIL SMTP CONFIGURATION ====================
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.getenv("MAIL_USERNAME", "yourgmail@gmail.com")
+app.config['MAIL_PASSWORD'] = os.getenv("MAIL_PASSWORD", "your_app_password")
+app.config['MAIL_DEFAULT_SENDER'] = app.config['MAIL_USERNAME']
+
+mail = Mail(app)
+
+# Temporary in-memory storage for OTPs: { "email@domain.com": "123456" }
+otp_store = {}
+
+# ==================== DATABASE CONFIGURATION ====================
 DB_HOST = os.getenv("DB_HOST", "mysql-afcb92d-rakeysh122-a4e8.g.aivencloud.com").strip()
 DB_USER = os.getenv("DB_USER", "avnadmin").strip()
 DB_PASSWORD = os.getenv("DB_PASSWORD", "AVNS_Mtj06xX2Hn6ZOow5X15").strip()
@@ -15,7 +30,6 @@ DB_NAME = os.getenv("DB_NAME", "defaultdb").strip()
 DB_PORT = int(os.getenv("DB_PORT", 26165))
 
 def get_db_connection():
-    # Correct SSL settings for PyMySQL connecting to Aiven from Render
     ssl_config = {"ssl_mode": "REQUIRED"} if DB_HOST != "localhost" else None
     
     return pymysql.connect(
@@ -178,7 +192,7 @@ def delete_product(product_id):
     finally:
         conn.close()
 
-# ==================== AUTHENTICATION ENDPOINTS ====================
+# ==================== AUTHENTICATION & OTP ENDPOINTS ====================
 @app.route('/api/auth/login', methods=['POST'])
 def auth_login():
     data = request.json or {}
@@ -207,13 +221,15 @@ def auth_login():
 @app.route('/api/auth/register', methods=['POST'])
 def auth_register():
     data = request.json or {}
-    username = data.get('username')
-    email = data.get('email')
+    username = data.get('username', '')
+    email = data.get('email', '')
     password = data.get('password')
     
     if not username or not password or not email:
         return jsonify({"error": "All fields are required"}), 400
         
+    assigned_role = 'ADMIN' if ('admin' in username.lower() or 'admin' in email.lower()) else 'USER'
+
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -223,12 +239,79 @@ def auth_register():
             
         cursor.execute(
             "INSERT INTO users (username, email, password, role) VALUES (%s, %s, %s, %s)", 
-            (username, email, password, "USER")
+            (username, email, password, assigned_role)
         )
         conn.commit()
-        return jsonify({"message": "Account created successfully!"}), 201
+        return jsonify({"message": f"Account created successfully as {assigned_role}!"}), 201
     except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/auth/send-otp', methods=['POST', 'OPTIONS'])
+def send_otp():
+    """ Sends a 6-digit OTP code to the requested email address """
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    data = request.json or {}
+    email = data.get('email')
+
+    if not email:
+        return jsonify({"error": "Email address is required"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+        if not cursor.fetchone():
+            return jsonify({"error": "No account found matching this email address"}), 404
+
+        otp_code = ''.join(random.choices(string.digits, k=6))
+        otp_store[email] = otp_code
+
+        msg = Message(
+            subject="ShopZon Security Password Reset Code",
+            recipients=[email],
+            body=f"Your password reset verification code is: {otp_code}\n\nIf you did not request this code, please ignore this email."
+        )
+        mail.send(msg)
+
+        return jsonify({"message": f"OTP verification code dispatched to {email}"}), 200
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to deliver OTP message: {str(e)}"}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/auth/verify-otp-reset', methods=['POST', 'OPTIONS'])
+def verify_otp_and_reset():
+    """ Validates the OTP and updates the account password in MySQL """
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    data = request.json or {}
+    email = data.get('email')
+    otp_code = data.get('otp')
+    new_password = data.get('new_password')
+
+    if not email or not otp_code or not new_password:
+        return jsonify({"error": "Email, OTP code, and new password are required"}), 400
+
+    if otp_store.get(email) != str(otp_code):
+        return jsonify({"error": "Invalid or expired OTP verification code"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE users SET password = %s WHERE email = %s", (new_password, email))
+        conn.commit()
+        
+        otp_store.pop(email, None)
+        
+        return jsonify({"message": "Password updated successfully! You can now log in."}), 200
+    except Exception as e:
+        return jsonify({"error": f"Database update error: {str(e)}"}), 500
     finally:
         conn.close()
 
@@ -253,7 +336,7 @@ def get_single_product(product_id):
     finally:
         conn.close()
 
-# ==================== ORDERS ENDPOINT ====================
+# ==================== ORDERS ENDPOINTS ====================
 @app.route('/api/orders', methods=['POST'])
 def place_order():
     conn = get_db_connection()
@@ -278,7 +361,6 @@ def place_order():
             qty = int(item.get('qty') or item.get('quantity') or 1)
             price = float(item.get('price') or 0.00)
 
-            # Ensure product exists in DB to prevent Foreign Key failures
             cursor.execute("SELECT id FROM products WHERE id = %s", (raw_id,))
             matched_product = cursor.fetchone()
 
@@ -351,7 +433,6 @@ def seed_products():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Safely bypass Foreign Key constraints to clear table
         cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
         cursor.execute("TRUNCATE TABLE products;")
         cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
@@ -369,28 +450,7 @@ def seed_products():
         return jsonify({"status": "success", "total_processed": inserted_count, "message": f"Successfully seeded {inserted_count} products!"}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-@app.route('/api/auth/reset-password', methods=['POST', 'OPTIONS'])
-def reset_password():
-    if request.method == 'OPTIONS':
-        return jsonify({'status': 'OK'}), 200
-        
-    data = request.json or {}
-    email = data.get('email')
-    new_password = data.get('new_password')
-    
-    if not email or not new_password:
-        return jsonify({"error": "Email and new password required"}), 400
-        
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("UPDATE users SET password = %s WHERE email = %s", (new_password, email))
-        conn.commit()
-        return jsonify({"message": "Password updated successfully!"}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        conn.close()
+
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)

@@ -3,6 +3,7 @@ import Auth from './components/Auth';
 import AdminDashboard from './components/AdminDashboard';
 import StorefrontHome from './components/StorefrontHome';
 import CartModal from './components/CartModal';
+import ForgotPasswordModal from './ForgotPasswordModal';
 
 export default function App() {
   const [user, setUser] = useState(null); 
@@ -15,6 +16,7 @@ export default function App() {
   
   const [adminViewMode, setAdminViewMode] = useState('ADMIN_PANEL');
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isForgotOpen, setIsForgotOpen] = useState(false); // State for Forgot Password Modal
 
   // UPDATED: Starts at zero and pulls real numbers from MySQL
   const [salesMetrics, setSalesMetrics] = useState({
@@ -95,7 +97,25 @@ export default function App() {
   };
 
   if (!user) {
-    return <Auth setUser={setUser} />;
+    return (
+      <div style={{ position: 'relative' }}>
+        <Auth setUser={setUser} />
+        
+        {/* Forgot Password Trigger Button placed near the login area */}
+        <div style={{ textAlign: 'center', marginTop: '-20px', paddingBottom: '20px', background: 'transparent', position: 'relative', zIndex: 10 }}>
+          <button 
+            type="button"
+            onClick={() => setIsForgotOpen(true)} 
+            style={{ background: 'none', border: 'none', color: '#0066c0', cursor: 'pointer', textDecoration: 'underline', fontWeight: '500', fontSize: '14px' }}
+          >
+            Forgot Password / Login with OTP?
+          </button>
+        </div>
+
+        {/* The Forgot Password Popup Modal */}
+        <ForgotPasswordModal isOpen={isForgotOpen} onClose={() => setIsForgotOpen(false)} />
+      </div>
+    );
   }
 
   return (
