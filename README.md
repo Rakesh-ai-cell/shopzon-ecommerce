@@ -1,5 +1,5 @@
 [![Live Demo](https://img.shields.io/badge/Live-Demo-brightgreen?style=for-the-badge&logo=vercel)](https://shopzon-ecommerce.vercel.app)
-![ShopZon Preview](URL_OR_IMAGE_LINK_HERE)
+![ShopZon Preview](https://shopzon-ecommerce.vercel.app/)
 # 🛒 ShopZon E-Commerce Portal
 
 A full-stack, responsive e-commerce web application with full Admin & Storefront support.
