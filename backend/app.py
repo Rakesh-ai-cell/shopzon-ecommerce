@@ -15,6 +15,7 @@ DB_NAME = os.getenv("DB_NAME", "defaultdb").strip()
 DB_PORT = int(os.getenv("DB_PORT", 26165))
 
 def get_db_connection():
+    # Correct SSL settings for PyMySQL connecting to Aiven from Render
     ssl_config = {"ssl_mode": "REQUIRED"} if DB_HOST != "localhost" else None
     
     return pymysql.connect(
@@ -28,7 +29,7 @@ def get_db_connection():
     )
 
 def init_db():
-    """ Automatically creates required tables and seeds initial data """
+    """ Automatically creates required tables on application startup """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -252,7 +253,7 @@ def get_single_product(product_id):
     finally:
         conn.close()
 
-# ==================== ORDERS ENDPOINT (FIXED) ====================
+# ==================== ORDERS ENDPOINT ====================
 @app.route('/api/orders', methods=['POST'])
 def place_order():
     conn = get_db_connection()
@@ -273,13 +274,12 @@ def place_order():
         order_id = cursor.lastrowid 
 
         for item in items:
-            # Safely handle different item key structures from frontend
+            # Extract product_id safely across varied frontend object shapes
             prod_id = item.get('id') or item.get('product_id')
             qty = item.get('qty') or item.get('quantity') or 1
             price = item.get('price') or 0.00
 
             if prod_id is None:
-                # Fallback to first product if missing id
                 cursor.execute("SELECT id FROM products LIMIT 1")
                 first_p = cursor.fetchone()
                 prod_id = first_p['id'] if first_p else 1
@@ -317,7 +317,7 @@ def get_admin_metrics():
     finally:
         conn.close()
 
-# ==================== SEEDER ENDPOINT (FIXED WORKING IMAGES) ====================
+# ==================== SEEDER ENDPOINT ====================
 @app.route('/api/seed', methods=['GET'])
 def seed_products():
     products_data = [
@@ -346,8 +346,10 @@ def seed_products():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Clear existing entries so new working image links take effect
+        # Safely bypass Foreign Key constraints to clear table
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
         cursor.execute("TRUNCATE TABLE products;")
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
         
         inserted_count = 0
         for item in products_data:
