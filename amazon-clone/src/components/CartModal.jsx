@@ -1,166 +1,170 @@
 import React, { useState } from 'react';
 
-export default function CartModal({ cartItems, user, onUpdateQty, onClearCart, onClose }) {
-  const [orderProcessing, setOrderProcessing] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
+export default function CartModal({ cart, removeFromCart, updateQuantity, clearCart, closeModal, user }) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Calculate prices dynamically
-  const subtotalPrice = cartItems.reduce((acc, item) => acc + (parseFloat(item.price) * item.quantity), 0);
-  const deliveryFee = subtotalPrice > 100 || subtotalPrice === 0 ? 0.00 : 9.99;
-  const estimatedTax = subtotalPrice * 0.13; // standard local regional engineering tax index calculation
-  const totalOrderPrice = subtotalPrice + deliveryFee + estimatedTax;
+  // Reliable image fallback if product image fails to load
+  const defaultImage = "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500";
 
-  // UPDATED: Dispatches data directly to your Flask server and writes to MySQL
-  const handleFinalCheckoutSubmit = () => {
-    if (cartItems.length === 0) return;
-    setOrderProcessing(true);
+  const handleImageError = (e) => {
+    e.target.onerror = null;
+    e.target.src = defaultImage;
+  };
 
-    // 1. Pack up the cart data to match your MySQL table structures exactly
-    const orderData = {
-      username: user.username,
-      items: cartItems.map(i => ({ id: i.id, qty: i.quantity, price: i.price })),
-      total_charge: totalOrderPrice.toFixed(2)
+  // Financial calculations
+  const subtotal = cart.reduce((sum, item) => sum + (Number(item.price || 0) * (item.qty || item.quantity || 1)), 0);
+  const shippingFee = cart.length > 0 ? 9.99 : 0.00;
+  const taxFee = subtotal * 0.13; // 13% tax
+  const totalAmount = subtotal + shippingFee + taxFee;
+
+  const handleCheckout = async () => {
+    if (cart.length === 0) {
+      alert("Your basket is empty!");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    // Format cart payload cleanly to ensure MySQL Foreign Key & schema alignment
+    const formattedItems = cart.map(item => ({
+      id: Number(item.id || item.product_id || 1),
+      qty: Number(item.qty || item.quantity || 1),
+      price: Number(item.price || 0)
+    }));
+
+    const payload = {
+      username: user?.username || user?.email || 'Guest User',
+      total_charge: parseFloat(totalAmount.toFixed(2)),
+      items: formattedItems
     };
 
-    // 2. Fire the network transmission down the pipeline to Flask
-    fetch('http://127.0.0.1:5000/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(orderData)
-    })
-    .then(res => {
-      if (!res.ok) throw new Error("Network database pipeline submission failure");
-      return res.json();
-    })
-    .then(data => {
-      setOrderProcessing(false);
-      // Reads the real AUTO_INCREMENT ID generated out of your MySQL engine row!
-      setSuccessMessage(`🎉 Order #${data.order_id} saved to live database successfully!`);
-      
-      setTimeout(() => {
-        onClearCart(); // Clear local shopping state values
-        onClose();     // Close overlay frame
-      }, 3000);
-    })
-    .catch(err => {
-      console.error("Checkout submission failed:", err);
-      setOrderProcessing(false);
-      alert("Error processing order checkout pipeline. Check backend server status.");
-    });
+    try {
+      const response = await fetch('https://shopzon-ecommerce.onrender.com/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(`🎉 Purchase Successful!\nOrder Reference: #${data.order_id}\nTotal Billed: $${totalAmount.toFixed(2)}`);
+        clearCart();
+        closeModal();
+      } else {
+        alert(`Checkout Failed: ${data.error || 'Check backend server logs'}`);
+      }
+    } catch (err) {
+      alert('Network error connecting to backend server. Please verify your connection.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'flex-end', zIndex: 3000 }}>
-      {/* Background overlay click-off fallback handler block */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onClick={onClose} />
-      
-      {/* Right Sidebar Drawer Framework Box */}
-      <div style={{ position: 'relative', width: '100%', maxWidth: '480px', background: '#ffffff', height: '100vh', boxShadow: '-5px 0 25px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column', color: '#111', fontFamily: 'Arial, sans-serif' }}>
+    <div style={styles.overlay} onClick={closeModal}>
+      <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
         
-        {/* Drawer Top Row Title Header */}
-        <div style={{ padding: '20px 25px', borderBottom: '1px solid #ddd', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8f9fa' }}>
-          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>🛒 Review Your Basket Pipeline</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', fontWeight: 'bold', color: '#555' }}>✕</button>
+        {/* Header */}
+        <div style={styles.header}>
+          <h2 style={{ margin: 0, fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            🛒 Review Your Basket Pipeline
+          </h2>
+          <button style={styles.closeBtn} onClick={closeModal}>✕</button>
         </div>
 
-        {/* Core items scroll area panel content stack */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 25px' }}>
-          {successMessage ? (
-            <div style={{ textAlign: 'center', padding: '40px 10px', background: '#d4edda', color: '#155724', borderRadius: '6px', border: '1px solid #c3e6cb', marginTop: '20px' }}>
-              <p style={{ margin: 0, fontSize: '15px', fontWeight: 'bold' }}>{successMessage}</p>
-              <p style={{ fontSize: '12px', color: '#155724', marginTop: '8px' }}>Your items register profile has cleared. Preparing tracking metrics entry points...</p>
-            </div>
-          ) : cartItems.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '60px 10px', color: '#767676' }}>
-              <span style={{ fontSize: '50px' }}>🛒</span>
-              <h4 style={{ margin: '15px 0 5px 0', color: '#111' }}>Your Shopping Basket Matrix is completely empty</h4>
-              <p style={{ fontSize: '13px', margin: 0 }}>Browse departments to populate interactive logistics orders entries.</p>
+        {/* Cart Items List */}
+        <div style={styles.itemsContainer}>
+          {cart.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#888' }}>
+              Your shopping cart is currently empty.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              {cartItems.map((item) => (
-                <div key={item.id} style={{ display: 'flex', gap: '15px', borderBottom: '1px solid #eee', paddingBottom: '15px', alignItems: 'center' }}>
-                  <div style={{ width: '70px', height: '70px', background: '#f9f9f9', border: '1px solid #e7e7e7', borderRadius: '4px', padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <img src={item.image_url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+            cart.map((item) => {
+              const itemTitle = item.title || item.name || "ShopZon Item";
+              const itemImg = item.image_url || item.image || defaultImage;
+              const itemQty = item.qty || item.quantity || 1;
+              const itemPrice = Number(item.price || 0);
+
+              return (
+                <div key={item.id} style={styles.itemRow}>
+                  <div style={styles.imgWrapper}>
+                    <img 
+                      src={itemImg} 
+                      alt={itemTitle} 
+                      onError={handleImageError} 
+                      style={styles.img} 
+                    />
                   </div>
                   
-                  <div style={{ flex: 1 }}>
-                    <h5 style={{ margin: '0 0 5px 0', fontSize: '13px', color: '#007185', fontWeight: '500', lineHeight: '1.3', height: '34px', overflow: 'hidden' }}>{item.title}</h5>
-                    <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '5px' }}>${parseFloat(item.price).toFixed(2)}</div>
+                  <div style={styles.itemDetails}>
+                    <div style={styles.itemTitle}>{itemTitle}</div>
+                    <div style={styles.itemPrice}>${itemPrice.toFixed(2)}</div>
                     
-                    {/* QUANTITY CONTROL BAR IN CHECOUT CARD */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={styles.qtyRow}>
+                      <label style={{ fontSize: '12px', color: '#aaa' }}>Qty:</label>
                       <button 
-                        onClick={() => onUpdateQty(item.id, item.quantity - 1)}
-                        style={{ padding: '2px 8px', background: '#e7e9ec', border: '1px solid #adb1b8', borderRadius: '3px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                        style={styles.qtyBtn} 
+                        onClick={() => updateQuantity(item.id, itemQty - 1)}
+                        disabled={itemQty <= 1}
                       >
                         -
                       </button>
-                      <span style={{ fontSize: '13px', fontWeight: 'bold', width: '20px', textAlign: 'center' }}>{item.quantity}</span>
+                      <span style={{ fontWeight: 'bold', padding: '0 8px' }}>{itemQty}</span>
                       <button 
-                        onClick={() => onUpdateQty(item.id, item.quantity + 1)}
-                        style={{ padding: '2px 8px', background: '#e7e9ec', border: '1px solid #adb1b8', borderRadius: '3px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                        style={styles.qtyBtn} 
+                        onClick={() => updateQuantity(item.id, itemQty + 1)}
                       >
                         +
                       </button>
+                      
                       <button 
-                        onClick={() => onUpdateQty(item.id, 0)}
-                        style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#b12704', cursor: 'pointer', fontSize: '11px', textDecoration: 'underline' }}
+                        style={styles.removeBtn} 
+                        onClick={() => removeFromCart(item.id)}
                       >
                         Remove item
                       </button>
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })
           )}
         </div>
 
-        {/* BOTTOM CHARGE METRICS & BUY BUTTON SLIDE CONTROL PANEL */}
-        {cartItems.length > 0 && !successMessage && (
-          <div style={{ padding: '20px 25px', borderTop: '1px solid #ddd', background: '#f8f9fa', boxShadow: '0 -4px 12px rgba(0,0,0,0.05)' }}>
-            <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 'bold', borderBottom: '1px solid #e7e7e7', paddingBottom: '8px' }}>Order Charge Specifications</h4>
+        {/* Charge Specifications Section */}
+        {cart.length > 0 && (
+          <div style={styles.summarySection}>
+            <h4 style={{ margin: '0 0 12px 0', textAlign: 'center', color: '#aaa', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              Order Charge Specifications
+            </h4>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#555', marginBottom: '6px' }}>
+            <div style={styles.specRow}>
               <span>Basket Subtotal:</span>
-              <span>${subtotalPrice.toFixed(2)}</span>
+              <span>${subtotal.toFixed(2)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#555', marginBottom: '6px' }}>
+            <div style={styles.specRow}>
               <span>Estimated Delivery Fee:</span>
-              <span>{deliveryFee === 0 ? 'FREE' : `$${deliveryFee.toFixed(2)}`}</span>
+              <span>${shippingFee.toFixed(2)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#555', marginBottom: '12px' }}>
+            <div style={styles.specRow}>
               <span>Regional Estimated Tax (13%):</span>
-              <span>${estimatedTax.toFixed(2)}</span>
+              <span>${taxFee.toFixed(2)}</span>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 'bold', color: '#b12704', marginBottom: '20px', borderTop: '1px solid #e7e7e7', paddingTop: '10px' }}>
+            <div style={styles.totalRow}>
               <span>Total Bill Balance:</span>
-              <span>${totalOrderPrice.toFixed(2)}</span>
+              <span>${totalAmount.toFixed(2)}</span>
             </div>
 
-            {/* LIVE STEP INTERACTION TRANSACTION EXECUTION TRIGGER */}
-            <button
-              onClick={handleFinalCheckoutSubmit}
-              disabled={orderProcessing}
-              style={{
-                width: '100%',
-                padding: '13px',
-                background: orderProcessing ? '#e7e9ec' : '#ffd814',
-                border: orderProcessing ? '1px solid #ccc' : '1px solid #fcd200',
-                borderRadius: '20px',
-                fontWeight: 'bold',
-                fontSize: '14px',
-                cursor: orderProcessing ? 'not-allowed' : 'pointer',
-                color: '#111',
-                boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
-              }}
+            <button 
+              style={{ ...styles.checkoutBtn, opacity: isSubmitting ? 0.7 : 1 }} 
+              onClick={handleCheckout}
+              disabled={isSubmitting}
             >
-              {orderProcessing ? '🔄 Saving to Database Engine Logs...' : '🚀 Place Secure Purchase Order'}
+              {isSubmitting ? '🔄 Saving to Database Engine Logs...' : '🚀 Place Secure Purchase Order'}
             </button>
-            
-            <p style={{ margin: '10px 0 0 0', fontSize: '11px', color: '#767676', textAlign: 'center' }}>
+            <p style={{ textAlign: 'center', fontSize: '11px', color: '#666', marginTop: '8px', marginBottom: 0 }}>
               Submitting registers real data node inputs down to backend relational tables.
             </p>
           </div>
@@ -170,3 +174,152 @@ export default function CartModal({ cartItems, user, onUpdateQty, onClearCart, o
     </div>
   );
 }
+
+const styles = {
+  overlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0, 0, 0, 0.85)',
+    display: 'flex',
+    justifyContent: 'flex-end',
+    zIndex: 9999,
+    fontFamily: 'Arial, sans-serif'
+  },
+  modalCard: {
+    background: '#18181c',
+    width: '100%',
+    maxWidth: '500px',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    color: '#fff',
+    boxShadow: '-5px 0 25px rgba(0,0,0,0.5)',
+    padding: '24px'
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: '16px',
+    borderBottom: '1px solid #333'
+  },
+  closeBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#aaa',
+    fontSize: '22px',
+    cursor: 'pointer'
+  },
+  itemsContainer: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '16px 0'
+  },
+  itemRow: {
+    display: 'flex',
+    gap: '16px',
+    background: '#222228',
+    borderRadius: '8px',
+    padding: '12px',
+    marginBottom: '12px',
+    border: '1px solid #2d2d35'
+  },
+  imgWrapper: {
+    width: '70px',
+    height: '70px',
+    background: '#fff',
+    borderRadius: '6px',
+    padding: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden'
+  },
+  img: {
+    maxWidth: '100%',
+    maxHeight: '100%',
+    objectFit: 'contain'
+  },
+  itemDetails: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between'
+  },
+  itemTitle: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#3498db',
+    lineHeight: '1.3'
+  },
+  itemPrice: {
+    fontSize: '15px',
+    fontWeight: 'bold',
+    color: '#fff',
+    margin: '4px 0'
+  },
+  qtyRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px'
+  },
+  qtyBtn: {
+    background: '#33333d',
+    color: '#fff',
+    border: '1px solid #444',
+    borderRadius: '4px',
+    width: '24px',
+    height: '24px',
+    cursor: 'pointer',
+    fontWeight: 'bold'
+  },
+  removeBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#ff4d4d',
+    fontSize: '12px',
+    cursor: 'pointer',
+    marginLeft: 'auto'
+  },
+  summarySection: {
+    borderTop: '1px solid #333',
+    paddingTop: '16px',
+    background: '#121215',
+    borderRadius: '8px',
+    padding: '16px',
+    marginTop: 'auto'
+  },
+  specRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '13px',
+    color: '#aaa',
+    marginBottom: '8px'
+  },
+  totalRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '18px',
+    fontWeight: 'bold',
+    color: '#ff9900',
+    marginTop: '12px',
+    paddingTop: '12px',
+    borderTop: '1px solid #2a2a30'
+  },
+  checkoutBtn: {
+    width: '100%',
+    background: '#ffd814',
+    color: '#000',
+    border: 'none',
+    borderRadius: '25px',
+    padding: '14px',
+    fontWeight: 'bold',
+    fontSize: '15px',
+    cursor: 'pointer',
+    marginTop: '16px',
+    transition: 'background 0.2s'
+  }
+};

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 
 export default function ProductList({ addToCart, searchTerm, selectedCategory }) {
@@ -6,8 +5,16 @@ export default function ProductList({ addToCart, searchTerm, selectedCategory })
   const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState(null); // Tracks the open product popup detail view
 
+  // Reliable image fallback for blocked/broken links
+  const defaultImage = "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500";
+
+  const handleImageError = (e) => {
+    e.target.onerror = null;
+    e.target.src = defaultImage;
+  };
+
   useEffect(() => {
-   fetch('https://shopzon-ecommerce.onrender.com/api/products')
+    fetch('https://shopzon-ecommerce.onrender.com/api/products')
       .then(res => res.json())
       .then(data => {
         setProducts(Array.isArray(data) ? data : []);
@@ -27,7 +34,8 @@ export default function ProductList({ addToCart, searchTerm, selectedCategory })
 
   // Filtering Logic Matrix
   const filteredProducts = products.filter(product => {
-    const matchesSearch = (product.name || product.title || "").toLowerCase().includes((searchTerm || "").toLowerCase());
+    const title = product.name || product.title || "";
+    const matchesSearch = title.toLowerCase().includes((searchTerm || "").toLowerCase());
     const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -42,13 +50,18 @@ export default function ProductList({ addToCart, searchTerm, selectedCategory })
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '30px' }}>
         {filteredProducts.map((product) => {
           const title = product.name || product.title || "ShopZon Item";
-          const image = product.image_url || product.image || "https://via.placeholder.com/200";
+          const image = product.image_url || product.image || defaultImage;
           const price = product.price ? Number(product.price) : 0.00;
 
           return (
             <div key={product.id} style={cardStyles.container}>
               <div style={cardStyles.imgFrame} onClick={() => setSelectedProduct(product)}>
-                <img src={image} alt="" style={cardStyles.image} />
+                <img 
+                  src={image} 
+                  alt={title} 
+                  onError={handleImageError} 
+                  style={cardStyles.image} 
+                />
               </div>
               <h3 style={cardStyles.title} onClick={() => setSelectedProduct(product)}>{title}</h3>
               <div style={cardStyles.actionRow}>
@@ -65,7 +78,7 @@ export default function ProductList({ addToCart, searchTerm, selectedCategory })
         })}
       </div>
 
-      {/* 💬 POPUP DESCRIPTION & COMMENTS VIEW MODAL */}
+      {/* POPUP DESCRIPTION & COMMENTS VIEW MODAL */}
       {selectedProduct && (
         <div style={modalStyles.overlay} onClick={() => setSelectedProduct(null)}>
           <div style={modalStyles.modalCard} onClick={(e) => e.stopPropagation()}>
@@ -73,17 +86,30 @@ export default function ProductList({ addToCart, searchTerm, selectedCategory })
             
             <div style={modalStyles.mainInfo}>
               <div style={modalStyles.leftColumn}>
-                <img src={selectedProduct.image_url || selectedProduct.image} alt="" style={modalStyles.popImg} />
+                <img 
+                  src={selectedProduct.image_url || selectedProduct.image || defaultImage} 
+                  alt={selectedProduct.name || selectedProduct.title} 
+                  onError={handleImageError} 
+                  style={modalStyles.popImg} 
+                />
               </div>
               <div style={modalStyles.rightColumn}>
-                <span style={modalStyles.badge}>{selectedProduct.category.toUpperCase()}</span>
+                <span style={modalStyles.badge}>{(selectedProduct.category || "General").toUpperCase()}</span>
                 <h2 style={modalStyles.popTitle}>{selectedProduct.name || selectedProduct.title}</h2>
                 <div style={{ color: '#ff9900', margin: '10px 0' }}>⭐ 4.5 out of 5 stars <span style={{ color: '#3498db', fontSize: '13px', marginLeft: '8px' }}>10 global ratings</span></div>
-                <div style={modalStyles.popPrice}>Price: <span style={{ color: '#f08804' }}>${Number(selectedProduct.price).toFixed(2)}</span></div>
+                <div style={modalStyles.popPrice}>Price: <span style={{ color: '#f08804' }}>${Number(selectedProduct.price || 0).toFixed(2)}</span></div>
                 <div style={{ color: '#2ecc71', fontSize: '14px', fontWeight: 'bold', margin: '15px 0' }}>🟢 In Stock. Available for immediate shipping.</div>
                 
                 <button 
-                  onClick={() => { addToCart({ ...selectedProduct, title: selectedProduct.name, image: selectedProduct.image_url }); setSelectedProduct(null); }}
+                  onClick={() => { 
+                    addToCart({ 
+                      ...selectedProduct, 
+                      title: selectedProduct.name || selectedProduct.title, 
+                      price: Number(selectedProduct.price || 0), 
+                      image: selectedProduct.image_url || selectedProduct.image 
+                    }); 
+                    setSelectedProduct(null); 
+                  }}
                   style={modalStyles.popAddBtn}
                 >
                   Add 1 Item to Shopping Cart

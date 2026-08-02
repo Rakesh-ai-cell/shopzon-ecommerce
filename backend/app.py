@@ -261,7 +261,7 @@ def place_order():
     try:
         data = request.json or {}
         username = data.get('username', 'Guest')
-        total_charge = data.get('total_charge') or data.get('total') or 0.00
+        total_charge = float(data.get('total_charge') or data.get('total') or 0.00)
         items = data.get('items', [])
 
         if not items:
@@ -274,21 +274,26 @@ def place_order():
         order_id = cursor.lastrowid 
 
         for item in items:
-            # Extract product_id safely across varied frontend object shapes
-            prod_id = item.get('id') or item.get('product_id')
-            qty = item.get('qty') or item.get('quantity') or 1
-            price = item.get('price') or 0.00
+            raw_id = item.get('id') or item.get('product_id')
+            qty = int(item.get('qty') or item.get('quantity') or 1)
+            price = float(item.get('price') or 0.00)
 
-            if prod_id is None:
+            # Ensure product exists in DB to prevent Foreign Key failures
+            cursor.execute("SELECT id FROM products WHERE id = %s", (raw_id,))
+            matched_product = cursor.fetchone()
+
+            if matched_product:
+                valid_prod_id = matched_product['id']
+            else:
                 cursor.execute("SELECT id FROM products LIMIT 1")
-                first_p = cursor.fetchone()
-                prod_id = first_p['id'] if first_p else 1
+                fallback = cursor.fetchone()
+                valid_prod_id = fallback['id'] if fallback else 1
 
             cursor.execute(
                 """INSERT INTO order_items 
                    (order_id, product_id, quantity, price_at_purchase) 
                    VALUES (%s, %s, %s, %s)""",
-                (order_id, prod_id, qty, price)
+                (order_id, valid_prod_id, qty, price)
             )
 
         conn.commit()
